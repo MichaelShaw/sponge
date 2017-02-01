@@ -6,9 +6,6 @@ extern crate glium;
 extern crate glutin;
 extern crate image;
 extern crate cgmath;
-extern crate rayon;
-extern crate time;
-
 
 use std::thread;
 use std::thread::JoinHandle;
@@ -83,7 +80,7 @@ pub fn start_renderer(width: u32, height: u32) -> Renderer {
             let opengl_texture = glium::texture::texture2d::Texture2d::new(&window, glium_image).unwrap();
             
             let uniforms = uniform! {
-                main_texture: &opengl_texture
+                main_texture: opengl_texture.sampled().magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest).minify_filter(glium::uniforms::MinifySamplerFilter::Nearest)
             };
 
             use glium::Surface;
