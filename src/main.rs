@@ -1,196 +1,38 @@
-#[macro_use]
-extern crate glium;
-extern crate glutin;
+extern crate sponge;
 extern crate image;
-extern crate cgmath;
 
 use image::RgbaImage;
 use image::Rgba;
 
-use std::thread;
-use std::thread::JoinHandle;
-use std::sync::mpsc::channel;
-use std::sync::mpsc::{Sender, Receiver};
-
-use glium::index::PrimitiveType;
+use sponge::*;
 
 fn main() {
     println!("starting renderer");
 
-    let width : u32 = 512;
-    let height : u32 = 512;
+    let render_width = 512;
+    let render_height = 512;
 
-    let renderer = start_renderer(width, height);
+    let scale = 2;
+
+    let window_width : u32 = render_width * scale;
+    let window_height : u32 = render_height * scale;
+
+    let renderer = start_renderer(window_width, window_height);
     
     renderer.receive_channel.recv().unwrap(); // swallow the window ready message
 
     for i in 0..100000 {
-        println!("sender :: rendering frame {:?}", i);
-        let n = (i % 256) as u8;
-        let img = RgbaImage::from_pixel(width, width, Rgba { data: [n,n,n,255] });
+        let mut img = RgbaImage::from_pixel(render_width, render_height, Rgba { data: [0,0,0,255] });
+        for x in 0..render_width {
+            for y in 0..render_height {
+                let pixel : Rgba<u8> = Rgba { data: [(x % 256) as u8,(y % 256) as u8,(i % 256) as u8, 255] };
+                img.put_pixel(x, y, pixel);
+            }
+        }
+
         renderer.send_channel.send(RendererUpdate::Render(i, img)).unwrap();
     }
 
     renderer.send_channel.send(RendererUpdate::Shutdown).unwrap();
     renderer.join_handle.join().unwrap()
-}
-
-#[derive(Copy, Clone)]
-struct Vertex {
-    pos: [f32; 2],
-    tex: [f32; 2],
-}
-
-implement_vertex!(Vertex, pos, tex);
-
-pub fn start_renderer(width: u32, height: u32) -> Renderer {
-    let (send_tx, send_rx) = channel::<RendererUpdate>();
-    let (reply_tx, reply_rx) = channel::<RendererReply>();
-    // let mut img = RgbaImage::from_pixel(image_size, image_size, Rgba { data: [25,25,25,255] });
-
-    let join_handle = thread::spawn(move || {
-        let window = build_window("Sponge", width, height);
-        let vertex_buffer = glium::VertexBuffer::new(&window, 
-            &[
-                Vertex { pos: [-1.0, -1.0], tex: [0.0, 0.0] },
-                Vertex { pos: [-1.0,  1.0], tex: [0.0, 1.0] },
-                Vertex { pos: [ 1.0,  1.0], tex: [1.0, 1.0] },
-                Vertex { pos: [ 1.0, -1.0], tex: [1.0, 0.0] }
-            ]
-        ).unwrap();
-        let index_buffer = glium::IndexBuffer::new(&window, PrimitiveType::TriangleStrip, &[1 as u16, 2, 0, 3]).unwrap();
-        let program = simple_program(&window);
-        // let program: glium::Program,
-
-        // setup permanent stuff
-        println!("renderer :: rendering in seperate thread");
-
-        reply_tx.send(RendererReply::WindowReady).unwrap();
-
-        'main: loop {
-            println!("renderer :: ahout to await event");
-            let (n, image) : (u64, RgbaImage) = match send_rx.recv() {
-                Ok(RendererUpdate::Render(n, update)) => (n, update),
-                Ok(RendererUpdate::Shutdown) => {
-                    reply_tx.send(RendererReply::Shutdown).unwrap();
-                    break 'main;
-                },
-                Err(err) => {
-                    println!("renderer couldnt receive event from send_rx failed -> {:?}", err);
-                    break 'main
-                }
-            };
-
-            // loop over events
-            println!("renderer :: polling window events");
-            for event in window.poll_events() {
-                match event {
-                    glutin::Event::KeyboardInput(_, _, Some(glutin::VirtualKeyCode::Escape)) |
-                    glutin::Event::Closed => {
-                        println!("renderer has received a shutdown");
-                        reply_tx.send(RendererReply::Shutdown).unwrap();
-                        break 'main;
-                    },
-                    glutin::Event::Resized(_width, _height) => {
-                        
-                    },
-                    _ => {},
-                }
-            }
-
-            let dimensions = image.dimensions();
-            let glium_image = glium::texture::RawImage2d::from_raw_rgba(image.into_raw(), dimensions);
-            let opengl_texture = glium::texture::texture2d::Texture2d::new(&window, glium_image).unwrap();
-            println!("render :: rendering {:?}", n);
-
-            let uniforms = uniform! {
-                main_texture: &opengl_texture
-            };
-
-            use glium::Surface;
-
-            let mut target = window.draw();
-            target.clear_color(0.0, 0.0, 0.0, 0.0);
-            target.draw(&vertex_buffer, &index_buffer, &program, &uniforms, &Default::default()).unwrap();
-            target.finish().unwrap();
-
-        
-
-            reply_tx.send(RendererReply::Ok).unwrap();
-        }
-   });
-   Renderer {
-        send_channel: send_tx,
-        receive_channel: reply_rx,
-        join_handle: join_handle,
-   }
-}
-
-pub enum RendererUpdate {
-    Render(u64,RgbaImage),
-    Shutdown,
-}
-
-pub enum RendererReply {
-    Ok,
-    WindowReady,
-    Shutdown,
-}
-
-
-pub struct Renderer {
-    pub send_channel: Sender<RendererUpdate>,
-    pub receive_channel: Receiver<RendererReply>,
-    pub join_handle: JoinHandle<()>
-}
-
-pub fn build_window(title:&str, width: u32, height: u32) -> glium::Display { 
-    use glium::DisplayBuild;
-    use glium::glutin::GlRequest;
-    use glium::glutin::GlProfile;
-    use glium::glutin::Api;
-    use glium::glutin::WindowBuilder;
-
-    let builder = WindowBuilder::new()
-        .with_title(title)
-        .with_dimensions(width, height)    
-        .with_gl_profile(GlProfile::Core)
-        .with_gl(GlRequest::Specific(Api::OpenGl,(3,3)))
-        .with_depth_buffer(24);
-
-    builder.build_glium()
-        .unwrap()
-}
-
-pub fn simple_program<T>(display : &T) -> glium::Program where T : glium::backend::Facade {
-    program!(display,
-        330 => {
-            vertex: "
-                #version 330
-                
-                in vec2 pos;
-                in vec2 tex;
-
-                out vec2 v_tex_coords;
-
-                void main() {
-                    gl_Position = vec4(pos, 0.0, 1.0);
-                    v_tex_coords = tex;
-                }
-            ",
-
-            fragment: "
-                #version 330
-
-                uniform sampler2D main_texture;
-
-                in vec2 v_tex_coords;
-                out vec4 f_color;
-
-                void main() {
-                    f_color = texture(main_texture, v_tex_coords);
-                }
-            "
-        },
-    ).unwrap()
 }
