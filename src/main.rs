@@ -137,8 +137,10 @@ fn sponge_renderer_3d(n: u64, img: &mut RgbaImage) {
 
     let target = origin + forward;
 
-    let per_move_init = 0.005;
-    let moves = 100;
+    let distance = 1.0;
+    let moves : u8 = 200;
+    let per_move_init : f32 = distance / (moves as f32);
+    
 
     let colour_multiplier : u8 = 255 / moves;
 
