@@ -1,0 +1,10 @@
+[package]
+name = "sponge"
+version = "0.1.0"
+authors = ["Michael Shaw <michaeljshaw@gmail.com>"]
+
+[dependencies]
+glium = { version = "0.16", features = ["glutin"] }
+glutin = "*"
+image = "0.12"
+cgmath = "0.12"
