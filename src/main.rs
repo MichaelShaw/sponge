@@ -15,6 +15,8 @@ use sponge::RendererUpdate::*;
 
 use rayon::{Configuration};
 
+use cgmath::*;
+
 fn point_to_offset(x: f32, y: f32, z: f32) -> u8 {
     (x * 3.0) as u8 + ((y * 3.0) as u8) * 3 + ((z * 3.0) as u8) * 9 // it's arbitrary you fool :D
 }
@@ -106,8 +108,6 @@ fn test_cube(x: f32, y: f32, z: f32) -> bool {
     true
 }
 
-use cgmath::InnerSpace;
-
 fn sponge_renderer_3d(n: u64, img: &mut RgbaImage) {
     let (width, height) = img.dimensions();
 
@@ -118,9 +118,22 @@ fn sponge_renderer_3d(n: u64, img: &mut RgbaImage) {
 
     let origin = Vec3f::new(0.5, 0.5, 0.5 - (n as f32) * 0.001);
 
-    let forward = Vec3f::new(0.0, 0.0, -1.0);
-    let down = Vec3f::new(0.0, -1.0, 0.0);
-    let right = Vec3f::new(1.0, 0.0, 0.0);
+    let theta : Rad<f32> = Rad((n as f32) * 0.01);
+
+    let rotation : cgmath::Matrix3<f32> = Matrix3::from_angle_x(theta);
+
+    let o_forward = Vec3f::new(0.0, 0.0, -1.0);
+    let o_right = Vec3f::new(1.0, 0.0, 0.0);
+    let o_down = Vec3f::new(0.0, -1.0, 0.0);
+
+    
+
+    let forward = rotation * o_forward;
+    let right = rotation * o_right;
+    let down = rotation * o_down;
+
+    println!("forward {:?} right {:?} down {:?}", forward, right, down);
+
 
     let target = origin + forward;
 
