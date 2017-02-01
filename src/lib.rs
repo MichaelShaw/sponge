@@ -6,6 +6,8 @@ extern crate glium;
 extern crate glutin;
 extern crate image;
 extern crate cgmath;
+extern crate rayon;
+extern crate time;
 
 
 use std::thread;
