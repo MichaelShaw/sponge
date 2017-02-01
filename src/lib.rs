@@ -48,10 +48,10 @@ pub fn start_renderer(width: u32, height: u32) -> Renderer {
         reply_tx.send(RendererReply::WindowReady).unwrap();
 
         'main: loop {
-            let (_, image) : (u64, RgbaImage) = match send_rx.recv() {
+            let (n, image) : (u64, RgbaImage) = match send_rx.recv() {
                 Ok(RendererUpdate::Render(n, update)) => (n, update),
-                Ok(RendererUpdate::Shutdown) => {
-                    reply_tx.send(RendererReply::Shutdown).unwrap();
+                Ok(RendererUpdate::ShutdownRenderer) => {
+                    reply_tx.send(RendererReply::RendererShutdown).unwrap();
                     break 'main;
                 },
                 Err(err) => {
@@ -66,7 +66,7 @@ pub fn start_renderer(width: u32, height: u32) -> Renderer {
                     glutin::Event::KeyboardInput(_, _, Some(glutin::VirtualKeyCode::Escape)) |
                     glutin::Event::Closed => {
                         println!("renderer has received a shutdown");
-                        reply_tx.send(RendererReply::Shutdown).unwrap();
+                        reply_tx.send(RendererReply::RendererShutdown).unwrap();
                         break 'main;
                     },
                     glutin::Event::Resized(_width, _height) => {
@@ -91,7 +91,7 @@ pub fn start_renderer(width: u32, height: u32) -> Renderer {
             target.draw(&vertex_buffer, &index_buffer, &program, &uniforms, &Default::default()).unwrap();
             target.finish().unwrap();
 
-            reply_tx.send(RendererReply::Ok).unwrap();
+            reply_tx.send(RendererReply::Rendered(n)).unwrap();
         }
         println!("renderer thread done");
    });
@@ -104,13 +104,13 @@ pub fn start_renderer(width: u32, height: u32) -> Renderer {
 
 pub enum RendererUpdate {
     Render(u64,RgbaImage),
-    Shutdown,
+    ShutdownRenderer,
 }
 
 pub enum RendererReply {
-    Ok,
+    Rendered(u64),
     WindowReady,
-    Shutdown,
+    RendererShutdown,
 }
 
 
