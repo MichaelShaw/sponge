@@ -28,10 +28,10 @@ fn main() {
 
     println!("starting renderer {:?}", 0b101u32);
 
-    let render_width = 512;
-    let render_height = 512;
+    let render_width = 256;
+    let render_height = 256;
 
-    let scale = 2;
+    let scale = 4;
 
     let window_width : u32 = render_width * scale;
     let window_height : u32 = render_height * scale;
@@ -85,7 +85,7 @@ fn main() {
 pub type Vec3f = cgmath::Vector3<f32>;
 
 
-const MAX_DEPTH: u8 = 2;
+const MAX_DEPTH: u8 = 5;
 const CUBE_MASK: u32 = 0b111101111_101000101_111101111u32;
 
 fn test_cube(x: f32, y: f32, z: f32) -> bool {
@@ -116,17 +116,17 @@ fn sponge_renderer_3d(n: u64, img: &mut RgbaImage) {
     let pixel = 1.0 / (width) as f32;
     let half_pixel: f32 = 1.0 / (width as f32);
 
-    let origin = Vec3f::new(0.5, 0.5, 0.5 - (n as f32) * 0.001);
+    let origin = Vec3f::new(0.5, 0.5, 0.5 + (n as f32) * 0.001);
 
     let theta : Rad<f32> = Rad((n as f32) * 0.01);
 
-    let rotation : cgmath::Matrix3<f32> = Matrix3::from_angle_x(theta);
+    let rotation : cgmath::Matrix3<f32> = Matrix3::from_angle_y(theta);
 
     let o_forward = Vec3f::new(0.0, 0.0, -1.0);
     let o_right = Vec3f::new(1.0, 0.0, 0.0);
     let o_down = Vec3f::new(0.0, -1.0, 0.0);
 
-    
+
 
     let forward = rotation * o_forward;
     let right = rotation * o_right;
@@ -137,8 +137,8 @@ fn sponge_renderer_3d(n: u64, img: &mut RgbaImage) {
 
     let target = origin + forward;
 
-    let per_move_init = 0.05;
-    let moves = 40;
+    let per_move_init = 0.005;
+    let moves = 100;
 
     let colour_multiplier : u8 = 255 / moves;
 
