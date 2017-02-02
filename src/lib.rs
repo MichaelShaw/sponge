@@ -12,9 +12,10 @@ use std::thread::JoinHandle;
 use std::sync::mpsc::channel;
 use std::sync::mpsc::{Sender, Receiver};
 
-use image::RgbaImage;
+use image::GrayImage;
 
 use glium::index::PrimitiveType;
+use glium::texture::RawImage2d;
 
 #[derive(Copy, Clone)]
 struct Vertex {
@@ -47,7 +48,7 @@ pub fn start_renderer(width: u32, height: u32) -> Renderer {
         reply_tx.send(RendererReply::WindowReady).unwrap();
 
         'main: loop {
-            let (n, image) : (u64, RgbaImage) = match send_rx.recv() {
+            let (n, image) : (u64, GrayImage) = match send_rx.recv() {
                 Ok(RendererUpdate::Render(n, update)) => (n, update),
                 Ok(RendererUpdate::ShutdownRenderer) => {
                     reply_tx.send(RendererReply::RendererShutdown).unwrap();
@@ -75,9 +76,24 @@ pub fn start_renderer(width: u32, height: u32) -> Renderer {
                 }
             }
 
-            let dimensions = image.dimensions();
-            let glium_image = glium::texture::RawImage2d::from_raw_rgba(image.into_raw(), dimensions);
-            let opengl_texture = glium::texture::texture2d::Texture2d::new(&window, glium_image).unwrap();
+            let (width, height) = image.dimensions();
+            let raw_image = image.into_raw();
+
+            use std::borrow::Cow;
+
+            let raw_image = RawImage2d {
+                data: Cow::from(&raw_image[..]),
+                width: width,
+                height: height,
+                format: glium::texture::ClientFormat::U8,
+            };
+
+
+
+            // glium::texture::UncompressedFloatFormat
+            // glium::texture::UncompressedFloatFormat
+            // let glium_image = glium::texture::RawImage2d::from_raw_rgba(image.into_raw(), dimensions);
+            let opengl_texture = glium::texture::texture2d::Texture2d::with_format(&window, raw_image, glium::texture::UncompressedFloatFormat::U8, glium::texture::MipmapsOption::NoMipmap).unwrap();
             
             let uniforms = uniform! {
                 main_texture: opengl_texture.sampled().magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest).minify_filter(glium::uniforms::MinifySamplerFilter::Nearest)
@@ -102,7 +118,7 @@ pub fn start_renderer(width: u32, height: u32) -> Renderer {
 }
 
 pub enum RendererUpdate {
-    Render(u64,RgbaImage),
+    Render(u64, GrayImage),
     ShutdownRenderer,
 }
 
@@ -163,7 +179,8 @@ pub fn simple_program<T>(display : &T) -> glium::Program where T : glium::backen
                 out vec4 f_color;
 
                 void main() {
-                    f_color = texture(main_texture, v_tex_coords);
+                    float gray = texture(main_texture, v_tex_coords).r;
+                    f_color = vec4(gray, gray, gray, 1.0);
                 }
             "
         },

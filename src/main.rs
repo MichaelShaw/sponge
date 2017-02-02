@@ -6,14 +6,15 @@ extern crate cgmath;
 
 
 
-use image::RgbaImage;
-use image::Rgba;
+use image::GrayImage;
+use image::Luma;
 
 use sponge::*;
 use sponge::RendererReply::*;
 use sponge::RendererUpdate::*;
 
 use rayon::{Configuration};
+// use rayon::prelude::*;
 
 use cgmath::*;
 
@@ -57,7 +58,7 @@ fn main() {
             }    
         }
         
-        let mut img = RgbaImage::from_pixel(render_width, render_height, Rgba { data: [(i % 256) as u8,0,0,255] });
+        let mut img = GrayImage::from_pixel(render_width, render_height, Luma { data: [0] });
         
         println!("send {:?}", i);
         sponge_renderer_3d(i, &mut img);
@@ -96,7 +97,7 @@ fn test_cube(x: f32, y: f32, z: f32) -> Option<f32> {
 
     let mut test_cube_size = ONE_THIRD;
 
-    for d in 0..MAX_DEPTH {
+    for _ in 0..MAX_DEPTH {
         let offset = point_to_offset(ux, uy, uz);
         if (1u32 << offset) & CUBE_MASK == 0 {
             return Some(test_cube_size);
@@ -106,23 +107,19 @@ fn test_cube(x: f32, y: f32, z: f32) -> Option<f32> {
             uy = (uy * 3.0) % 1.0;
             uz = (uz * 3.0) % 1.0;
         }
-        test_cube_size * ONE_THIRD;
+        test_cube_size *= ONE_THIRD;
     }
 
     None
 }
 
-fn test_ray(at:Vec3f, direction:Vec3f) -> bool {
-    true
-}
-
-fn sponge_renderer_3d(n: u64, img: &mut RgbaImage) {
+fn sponge_renderer_3d(n: u64, img: &mut GrayImage) {
     let (width, height) = img.dimensions();
 
-    let nu = (n % 256) as u8;
+    // let nu = (n % 256) as u8;
 
-    let pixel = 1.0 / (width) as f32;
-    let half_pixel: f32 = 1.0 / (width as f32);
+    // let pixel = 1.0 / (width) as f32;
+    // let half_pixel: f32 = 1.0 / (width as f32);
 
     let origin = Vec3f::new(0.5, 0.5, 0.5 - (n as f32) * 0.005);
 
@@ -147,7 +144,7 @@ fn sponge_renderer_3d(n: u64, img: &mut RgbaImage) {
 
     let distance = 0.65;
     let moves : u8 = 192;
-    let per_move_init : f32 = distance / (moves as f32);
+    let per_move : f32 = distance / (moves as f32);
     
     let mut color_lookup : Vec<u8> = Vec::new();
 
@@ -155,9 +152,7 @@ fn sponge_renderer_3d(n: u64, img: &mut RgbaImage) {
         color_lookup.push((i as f32).powf(0.8) as u8);
     }
 
-
-
-    let colour_multiplier : u8 = 255 / moves;
+    // let colour_multiplier : u8 = 255 / moves;
 
     for x in 0..width {   
         for y in 0..height {
@@ -167,18 +162,17 @@ fn sponge_renderer_3d(n: u64, img: &mut RgbaImage) {
             let pixel_target = fx * right + fy * down + target;
             let direction = (pixel_target - origin).normalize();
 
-            let mut per_move = per_move_init;
             let mut point = origin + direction * per_move;
-            
 
             let mut hit = false;
             for d in 0..moves {
-                if let Some(rejected_cube_size) =  test_cube(point.x % 1.0, point.y % 1.0, point.z % 1.0) {
+                if let Some(_) =  test_cube(point.x % 1.0, point.y % 1.0, point.z % 1.0) {
+                    // rejected_cube_size
                     point += direction * per_move;
                 } else {
                     hit = true;
                     let darkness = color_lookup[d as usize];
-                    let pixel : Rgba<u8> = Rgba { data: [darkness, darkness, darkness, 255] };
+                    let pixel : Luma<u8> = Luma { data: [darkness] };
                     img.put_pixel(x, y, pixel);
                     break;
                 }
@@ -186,23 +180,19 @@ fn sponge_renderer_3d(n: u64, img: &mut RgbaImage) {
 
             if !hit {
                 let darkness = color_lookup[moves as usize];
-                let pixel : Rgba<u8> = Rgba { data: [darkness, darkness, darkness, 255] };
+                let pixel : Luma<u8> = Luma { data: [darkness] };
                 img.put_pixel(x, y, pixel);
             }
-
-
-
-
 
         }
     }
 }
 
-fn text_pattern_render(n: u64, img: &mut RgbaImage) {
+fn text_pattern_render(n: u64, img: &mut GrayImage) {
     let (width, height) = img.dimensions();
-    for x in (0..width) {
+    for x in 0..width {
         for y in 0..height {
-            let pixel : Rgba<u8> = Rgba { data: [(x % 256) as u8,(y % 256) as u8,(n % 256) as u8, 255] };
+            let pixel : Luma<u8> = Luma { data: [((x + y + (n as u32)) % 256) as u8] };
             img.put_pixel(x, y, pixel);
         }
     }
