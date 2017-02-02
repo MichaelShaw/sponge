@@ -14,23 +14,27 @@ use sponge::RendererReply::*;
 use sponge::RendererUpdate::*;
 
 use rayon::{Configuration};
-// use rayon::prelude::*;
+use rayon::prelude::*;
 
 use cgmath::*;
 
+const RENDER_WIDTH : u32 = 256;
+const RENDER_HEIGHT : u32 = 256;
+const RENDER_PIXELS : usize = (RENDER_WIDTH * RENDER_HEIGHT) as usize;
+
 fn main() {
-    let config = Configuration::new();
-    rayon::initialize(config.set_num_threads(3)).unwrap();
+    // let config = Configuration::new();
+    // rayon::initialize(config.set_num_threads(4)).unwrap();
 
     println!("starting renderer {:?}", 0b101u32);
 
-    let render_width = 256;
-    let render_height = 256;
+    // let render_width = 256;
+    // let render_height = 256;
 
     let scale = 4;
 
-    let window_width : u32 = render_width * scale;
-    let window_height : u32 = render_height * scale;
+    let window_width : u32 = RENDER_WIDTH * scale;
+    let window_height : u32 = RENDER_HEIGHT * scale;;
 
     let renderer = start_renderer(window_width, window_height);
     
@@ -58,10 +62,9 @@ fn main() {
             }    
         }
         
-        let mut img = GrayImage::from_pixel(render_width, render_height, Luma { data: [0] });
-        
-        println!("send {:?}", i);
-        sponge_renderer_3d(i, &mut img);
+        let img_raw = sponge_renderer_3d(i, RENDER_WIDTH, RENDER_HEIGHT);
+
+        let img = GrayImage::from_raw(RENDER_WIDTH, RENDER_HEIGHT, img_raw).unwrap();
 
         match renderer.send_channel.send(Render(i, img)) {
             Ok(_) => (),
@@ -113,9 +116,7 @@ fn test_cube(x: f32, y: f32, z: f32) -> Option<f32> {
     None
 }
 
-fn sponge_renderer_3d(n: u64, img: &mut GrayImage) {
-    let (width, height) = img.dimensions();
-
+fn sponge_renderer_3d(n: u64, width: u32, height: u32) -> Vec<u8> {
     // let nu = (n % 256) as u8;
 
     // let pixel = 1.0 / (width) as f32;
@@ -154,38 +155,46 @@ fn sponge_renderer_3d(n: u64, img: &mut GrayImage) {
 
     // let colour_multiplier : u8 = 255 / moves;
 
-    for x in 0..width {   
-        for y in 0..height {
-            let fx = (x as f32) / (width as f32) * 2.0 - 1.0; // -0.5 .. 0.5
-            let fy = (y as f32) / (height as f32) * 2.0 - 1.0; // -0.5 .. 0.5
+    let pixels : Vec<u32> = (0..(width * height)).collect();
+    let img : Vec<u8> = pixels.par_iter().map(|p|{
+        let x = p % width;
+        let y = p / width;
 
-            let pixel_target = fx * right + fy * down + target;
-            let direction = (pixel_target - origin).normalize();
+        let fx = (x as f32) / (width as f32) * 2.0 - 1.0; // -0.5 .. 0.5
+        let fy = (y as f32) / (height as f32) * 2.0 - 1.0; // -0.5 .. 0.5
 
-            let mut point = origin + direction * per_move;
+        let pixel_target = fx * right + fy * down + target;
+        let direction = (pixel_target - origin).normalize();
 
-            let mut hit = false;
-            for d in 0..moves {
-                if let Some(_) =  test_cube(point.x % 1.0, point.y % 1.0, point.z % 1.0) {
-                    // rejected_cube_size
-                    point += direction * per_move;
-                } else {
-                    hit = true;
-                    let darkness = color_lookup[d as usize];
-                    let pixel : Luma<u8> = Luma { data: [darkness] };
-                    img.put_pixel(x, y, pixel);
-                    break;
-                }
+        let mut point = origin + direction * per_move;
+
+        for d in 0..moves {
+            if let Some(_) =  test_cube(point.x % 1.0, point.y % 1.0, point.z % 1.0) {
+                // rejected_cube_size
+                point += direction * per_move;
+            } else {
+                return color_lookup[d as usize];
             }
-
-            if !hit {
-                let darkness = color_lookup[moves as usize];
-                let pixel : Luma<u8> = Luma { data: [darkness] };
-                img.put_pixel(x, y, pixel);
-            }
-
         }
-    }
+        color_lookup[moves as usize]
+
+        
+    }).collect();
+
+    
+
+    // for p in img.iter_mut() {
+    //     *p = 128;
+
+    // }
+
+    // for x in 0..width {   
+    //     for y in 0..height {
+
+
+    //     }
+    // }
+    img
 }
 
 fn text_pattern_render(n: u64, img: &mut GrayImage) {
