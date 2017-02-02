@@ -20,16 +20,10 @@ use cgmath::*;
 
 const RENDER_WIDTH : u32 = 256;
 const RENDER_HEIGHT : u32 = 256;
-const RENDER_PIXELS : usize = (RENDER_WIDTH * RENDER_HEIGHT) as usize;
 
 fn main() {
     // let config = Configuration::new();
     // rayon::initialize(config.set_num_threads(4)).unwrap();
-
-    println!("starting renderer {:?}", 0b101u32);
-
-    // let render_width = 256;
-    // let render_height = 256;
 
     let scale = 4;
 
@@ -84,11 +78,27 @@ fn main() {
 pub type Vec3f = cgmath::Vector3<f32>;
 
 
-const MAX_DEPTH: u8 = 5;
+
 const CUBE_MASK: u32 = 0b111101111_101000101_111101111u32;
 
+
+
+// const CUBE_MASK: u32 = 0b101000101_000000000_101000101u32;
+// const CUBE_MASK: u32 = 0b11111_111101111_101000101_111101111u32;
+// const CUBE_MASK: u32 = 0b00000_111101111_101000101_111101111u32;
+// const CUBE_MASK: u32 = 0b00000_111111111_000000000_111111111u32;
+
+// const CUBE_MASK: u32 = 0b110101011_111000101_111101111u32;
+
+const MAX_DEPTH: u8 = 5;
+
+const CUBE_SIZE : u8 = 3;
+
 fn point_to_offset(x: f32, y: f32, z: f32) -> u8 {
-    (x * 3.0) as u8 + ((y * 3.0) as u8) * 3 + ((z * 3.0) as u8) * 9 // it's arbitrary you fool :D
+    (x * 3.0) as u8 // 0..2
+    + ((z * 3.0) as u8) * CUBE_SIZE // 0..2 * 3, 0..6
+        //  // 0 -> 6 ... this aint right
+        + ((y * 3.0) as u8) * (CUBE_SIZE * CUBE_SIZE) // 0..2 * 9, 0..18
 }
 
 const ONE_THIRD : f32 = 1.0 / 3.0;
@@ -122,6 +132,7 @@ fn sponge_renderer_3d(n: u64, width: u32, height: u32) -> Vec<u8> {
     // let pixel = 1.0 / (width) as f32;
     // let half_pixel: f32 = 1.0 / (width as f32);
 
+    // let origin = Vec3f::new(0.5 - ONE_THIRD , 0.5, 0.5 - (n as f32) * 0.005);
     let origin = Vec3f::new(0.5, 0.5, 0.5 - (n as f32) * 0.005);
 
     let theta : Rad<f32> = Rad((n as f32) * 0.01);
@@ -138,12 +149,12 @@ fn sponge_renderer_3d(n: u64, width: u32, height: u32) -> Vec<u8> {
     let right = rotation * o_right;
     let down = rotation * o_down;
 
-    println!("forward {:?} right {:?} down {:?}", forward, right, down);
+    println!("position {:?} forward {:?} right {:?} down {:?}", origin, forward, right, down);
 
 
     let target = origin + forward;
 
-    let distance = 0.65;
+    let distance = 1.00;
     let moves : u8 = 192;
     let per_move : f32 = distance / (moves as f32);
     
@@ -153,10 +164,8 @@ fn sponge_renderer_3d(n: u64, width: u32, height: u32) -> Vec<u8> {
         color_lookup.push((i as f32).powf(0.8) as u8);
     }
 
-    // let colour_multiplier : u8 = 255 / moves;
-
     let pixels : Vec<u32> = (0..(width * height)).collect();
-    let img : Vec<u8> = pixels.par_iter().map(|p|{
+    pixels.par_iter().map(|p|{
         let x = p % width;
         let y = p / width;
 
@@ -166,10 +175,19 @@ fn sponge_renderer_3d(n: u64, width: u32, height: u32) -> Vec<u8> {
         let pixel_target = fx * right + fy * down + target;
         let direction = (pixel_target - origin).normalize();
 
-        let mut point = origin + direction * per_move;
+        let mut point = origin + direction * (ONE_THIRD / 2.0);
 
         for d in 0..moves {
-            if let Some(_) =  test_cube(point.x % 1.0, point.y % 1.0, point.z % 1.0) {
+            // just ensuring a positive dimension
+            let px = ((point.x % 1.0) + 1.0) % 1.0; 
+            let py = ((point.y % 1.0) + 1.0) % 1.0;
+            let pz = ((point.z % 1.0) + 1.0) % 1.0;
+
+            // let px = ((point.x % 1.0) + 1.0); 
+            // let py = ((point.y % 1.0) + 1.0);
+            // let pz = ((point.z % 1.0) + 1.0);
+
+            if let Some(_) = test_cube(px, py, pz) {
                 // rejected_cube_size
                 point += direction * per_move;
             } else {
@@ -179,22 +197,7 @@ fn sponge_renderer_3d(n: u64, width: u32, height: u32) -> Vec<u8> {
         color_lookup[moves as usize]
 
         
-    }).collect();
-
-    
-
-    // for p in img.iter_mut() {
-    //     *p = 128;
-
-    // }
-
-    // for x in 0..width {   
-    //     for y in 0..height {
-
-
-    //     }
-    // }
-    img
+    }).collect()
 }
 
 fn text_pattern_render(n: u64, img: &mut GrayImage) {
