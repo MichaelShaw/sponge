@@ -18,145 +18,119 @@ use glium::index::PrimitiveType;
 use glium::texture::RawImage2d;
 
 pub type SpongeResult<T> = Result<T, SpongeError>;
+
 #[derive(Debug)]
 pub enum SpongeError {
     ProgramCreation(glium::program::ProgramChooserCreationError),
     WindowCreation(glium::GliumCreationError<glutin::CreationError>),
+    VertexCreation(glium::vertex::BufferCreationError),
+    IndexCreation(glium::index::BufferCreationError),
 }
 
 
 #[derive(Copy, Clone)]
-struct Vertex {
+pub struct Vertex {
     pos: [f32; 2],
     tex: [f32; 2],
 }
 
 implement_vertex!(Vertex, pos, tex);
 
-pub fn start_renderer(width: u32, height: u32) -> Renderer {
-    let (send_tx, send_rx) = channel::<RendererUpdate>();
-    let (reply_tx, reply_rx) = channel::<RendererReply>();
-    // let mut img = RgbaImage::from_pixel(image_size, image_size, Rgba { data: [25,25,25,255] });
+pub struct Renderer {
+    pub display: glium::Display,
+    pub program: glium::Program,
+    pub vertex_buffer: glium::VertexBuffer<Vertex>,
+    pub index_buffer: glium::IndexBuffer<u16>, 
+}
 
-    let join_handle = thread::spawn(move || {
-        println!("about to build window");
-        let window = build_window("Sponge", width, height).unwrap();
-        println!("I built the window");
-        let program = simple_program(&window).unwrap();
-        println!("I built the program");
-        let vertex_buffer = glium::VertexBuffer::new(&window, 
+impl Renderer {
+    pub fn new(width: u32, height: u32) -> SpongeResult<Renderer> {
+        let display : glium::Display = build_window("Sponge", width, height)?;
+        let program = simple_program(&display)?;
+        let vertex_buffer = glium::VertexBuffer::new(&display,
             &[
                 Vertex { pos: [-1.0, -1.0], tex: [0.0, 0.0] },
                 Vertex { pos: [-1.0,  1.0], tex: [0.0, 1.0] },
                 Vertex { pos: [ 1.0,  1.0], tex: [1.0, 1.0] },
                 Vertex { pos: [ 1.0, -1.0], tex: [1.0, 0.0] }
             ]
-        ).unwrap();
-        let index_buffer = glium::IndexBuffer::new(&window, PrimitiveType::TriangleStrip, &[1 as u16, 2, 0, 3]).unwrap();
-        println!("I built the geometry");
-        // setup permanent stuff
-        reply_tx.send(RendererReply::WindowReady).unwrap();
+        ).map_err(SpongeError::VertexCreation)?;
+        // 
+        let index_buffer = glium::IndexBuffer::new(
+            &display, 
+            PrimitiveType::TriangleStrip, &[1 as u16, 2, 0, 3]
+        ).map_err(SpongeError::IndexCreation)?;
 
-        'main: loop {
-            let (n, image) : (u64, GrayImage) = match send_rx.recv() {
-                Ok(RendererUpdate::Render(n, update)) => (n, update),
-                Ok(RendererUpdate::ShutdownRenderer) => {
-                    reply_tx.send(RendererReply::RendererShutdown).unwrap();
-                    break 'main;
+        Ok(Renderer {
+            display: display,
+            program: program,
+            vertex_buffer: vertex_buffer,
+            index_buffer: index_buffer,
+        })      
+    }
+
+    pub fn render(&mut self, image: GrayImage) -> bool {
+        let mut should_close = false;
+        // loop over events
+        for event in self.display.poll_events() {
+            println!("got an event -> {:?}", event);
+            match event {
+                glutin::Event::KeyboardInput(_, _, Some(glutin::VirtualKeyCode::Escape)) |
+                glutin::Event::Closed => {
+                    println!("renderer has received a shutdown");
+                    should_close = true
                 },
-                Err(err) => {
-                    println!("renderer couldnt receive event from send_rx failed -> {:?}", err);
-                    break 'main
-                }
-            };
-
-            println!("pre poll");
-            // loop over events
-            for event in window.poll_events() {
-                println!("got an event -> {:?}", event);
-                match event {
-                    glutin::Event::KeyboardInput(_, _, Some(glutin::VirtualKeyCode::Escape)) |
-                    glutin::Event::Closed => {
-                        println!("renderer has received a shutdown");
-                        reply_tx.send(RendererReply::RendererShutdown).unwrap();
-                        break 'main;
-                    },
-                    glutin::Event::Resized(_width, _height) => {
-                        
-                    },
-                    _ => {},
-                }
+                glutin::Event::Resized(_width, _height) => {
+                    
+                },
+                _ => {},
             }
-            println!("post poll");
-
-            let (width, height) = image.dimensions();
-            let raw_image = image.into_raw();
-
-            use std::borrow::Cow;
-
-            let raw_image = RawImage2d {
-                data: Cow::from(&raw_image[..]),
-                width: width,
-                height: height,
-                format: glium::texture::ClientFormat::U8,
-            };
-
-            println!("post raw image");
-
-
-            // glium::texture::UncompressedFloatFormat
-            // glium::texture::UncompressedFloatFormat
-            // let glium_image = glium::texture::RawImage2d::from_raw_rgba(image.into_raw(), dimensions);
-            let opengl_texture = glium::texture::texture2d::Texture2d::with_format(&window, raw_image, glium::texture::UncompressedFloatFormat::U8, glium::texture::MipmapsOption::NoMipmap).unwrap();
-            
-            println!("post texture");
-
-            let uniforms = uniform! {
-                main_texture: opengl_texture.sampled().magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest).minify_filter(glium::uniforms::MinifySamplerFilter::Nearest)
-            };
-
-            println!("post uniforms");
-
-            use glium::Surface;
-
-            let mut target = window.draw();
-
-            println!("got target");
-
-            target.clear_color(0.0, 0.0, 0.0, 0.0);
-            println!("post clear");
-            target.draw(&vertex_buffer, &index_buffer, &program, &uniforms, &Default::default()).unwrap();
-            println!("post draw");
-            target.finish().unwrap();
-            println!("post finish");
-
-            reply_tx.send(RendererReply::Rendered(n)).unwrap();
         }
-        println!("renderer thread done");
-   });
-   Renderer {
-        send_channel: send_tx,
-        receive_channel: reply_rx,
-        join_handle: join_handle,
-   }
-}
-
-pub enum RendererUpdate {
-    Render(u64, GrayImage),
-    ShutdownRenderer,
-}
-
-pub enum RendererReply {
-    Rendered(u64),
-    WindowReady,
-    RendererShutdown,
-}
 
 
-pub struct Renderer {
-    pub send_channel: Sender<RendererUpdate>,
-    pub receive_channel: Receiver<RendererReply>,
-    pub join_handle: JoinHandle<()>
+        let (width, height) = image.dimensions();
+        let raw_image = image.into_raw();
+
+        use std::borrow::Cow;
+
+        let raw_image = RawImage2d {
+            data: Cow::from(&raw_image[..]),
+            width: width,
+            height: height,
+            format: glium::texture::ClientFormat::U8,
+        };
+
+        println!("post raw image");
+
+
+        // glium::texture::UncompressedFloatFormat
+        // glium::texture::UncompressedFloatFormat
+        // let glium_image = glium::texture::RawImage2d::from_raw_rgba(image.into_raw(), dimensions);
+        let opengl_texture = glium::texture::texture2d::Texture2d::with_format(&self.display, raw_image, glium::texture::UncompressedFloatFormat::U8, glium::texture::MipmapsOption::NoMipmap).unwrap();
+        
+        println!("post texture");
+
+        let uniforms = uniform! {
+            main_texture: opengl_texture.sampled().magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest).minify_filter(glium::uniforms::MinifySamplerFilter::Nearest)
+        };
+
+        println!("post uniforms");
+
+        use glium::Surface;
+
+        let mut target = self.display.draw();
+
+        println!("got target");
+
+        target.clear_color(0.0, 0.0, 0.0, 0.0);
+        println!("post clear");
+        target.draw(&self.vertex_buffer, &self.index_buffer, &self.program, &uniforms, &Default::default()).unwrap();
+        println!("post draw");
+        target.finish().unwrap();
+        println!("post finish");
+
+        should_close
+    }
 }
 
 pub fn build_window(title:&str, width: u32, height: u32) -> SpongeResult<glium::Display> { 

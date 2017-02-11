@@ -6,12 +6,12 @@ extern crate cgmath;
 
 
 
+use std::thread;
+
 use image::GrayImage;
 use image::Luma;
 
 use sponge::*;
-use sponge::RendererReply::*;
-use sponge::RendererUpdate::*;
 
 use rayon::{Configuration};
 use rayon::prelude::*;
@@ -22,57 +22,27 @@ const RENDER_WIDTH : u32 = 256;
 const RENDER_HEIGHT : u32 = 256;
 
 fn main() {
-    // let config = Configuration::new();
-    // rayon::initialize(config.set_num_threads(4)).unwrap();
+    let scale = 2;
 
-    let scale = 1;
+    let current_thread = thread::current();
+    println!("current thread -> {:?}", current_thread); 
 
     let window_width : u32 = RENDER_WIDTH * scale;
     let window_height : u32 = RENDER_HEIGHT * scale;;
 
-    let renderer = start_renderer(window_width, window_height);
-    
-    renderer.receive_channel.recv().unwrap(); // swallow the window ready message
+    let mut renderer = Renderer::new(window_width, window_height).unwrap();
 
     let mut renderer_initiated_shutdown = false;
 
-    'outter: for i in 0..1000000 {
-        'check_render: loop {
-            match renderer.receive_channel.try_recv() {
-                Err(_) => {
-                    break 'check_render
-                },
-                Ok(Rendered(frame_n)) => {
-                    let frame_delta = i64::abs((frame_n as i64) - (i as i64));
-                    if frame_delta > 10 {
-                        println!("main :: we're up to frame {:?} but renderer has only rendered {:?} frame delta is {:?}", i, frame_n, frame_delta);
-                    }
-                },
-                Ok(WindowReady) => (),
-                Ok(RendererShutdown) => {
-                    renderer_initiated_shutdown = true;
-                    break 'outter
-                }
-            }    
-        }
-        
+    'main: for i in 0..1000000000 {
         let img_raw = sponge_renderer_3d(i, RENDER_WIDTH, RENDER_HEIGHT);
 
         let img = GrayImage::from_raw(RENDER_WIDTH, RENDER_HEIGHT, img_raw).unwrap();
-
-        match renderer.send_channel.send(Render(i, img)) {
-            Ok(_) => (),
-            Err(_) => {
-                renderer_initiated_shutdown = true;
-                break 'outter;
-            },
+        if renderer.render(img) {
+            println!("should close");
+            break 'main
         }
     }
-
-    if !renderer_initiated_shutdown {
-        renderer.send_channel.send(ShutdownRenderer).unwrap();    
-    }
-    renderer.join_handle.join().unwrap()
 }
 
 pub type Vec3f = cgmath::Vector3<f32>;
