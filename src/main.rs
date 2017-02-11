@@ -25,7 +25,7 @@ fn main() {
     // let config = Configuration::new();
     // rayon::initialize(config.set_num_threads(4)).unwrap();
 
-    let scale = 4;
+    let scale = 1;
 
     let window_width : u32 = RENDER_WIDTH * scale;
     let window_height : u32 = RENDER_HEIGHT * scale;;
