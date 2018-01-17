@@ -4,9 +4,9 @@ version = "0.1.0"
 authors = ["Michael Shaw <michaeljshaw@gmail.com>"]
 
 [dependencies]
-glium = { version = "0.16", features = ["glutin"] }
-glutin = "*"
-image = "0.12"
-cgmath = "0.12"
+glium = { version = "*", features = ["glutin"] }
+glutin = "0.11"
+image = "*"
+cgmath = "*"
 time = "0.1"
 rayon = "0.6"

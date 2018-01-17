@@ -114,7 +114,7 @@ fn sponge_renderer_3d(n: u64, width: u32, height: u32) -> Vec<u8> {
     let right = rotation * o_right;
     let down = rotation * o_down;
 
-    println!("position {:?} forward {:?} right {:?} down {:?}", origin, forward, right, down);
+//    println!("position {:?} forward {:?} right {:?} down {:?}", origin, forward, right, down);
 
 
     let target = origin + forward;
